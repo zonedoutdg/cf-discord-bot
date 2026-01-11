@@ -53,8 +53,14 @@ CF_ROLE_NAMES = [r[2] for r in CF_ROLES]
 def load_json(file, default):
     if not os.path.exists(file):
         return default
-    with open(file, "r") as f:
-        return json.load(f)
+    try:
+        with open(file, "r") as f:
+            content = f.read().strip()
+            if not content:
+                return default
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return default
 
 def save_json(file, data):
     with open(file, "w") as f:

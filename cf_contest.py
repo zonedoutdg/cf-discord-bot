@@ -20,8 +20,14 @@ CF_API = "https://codeforces.com/api/contest.list"
 def load_seen():
     if not os.path.exists(DATA_FILE):
         return set()
-    with open(DATA_FILE, "r") as f:
-        return set(json.load(f))
+    try:
+        with open(DATA_FILE, "r") as f:
+            content = f.read().strip()
+            if not content:
+                return set()
+            return set(json.load(f))
+    except (json.JSONDecodeError, IOError):
+        return set()
 
 def save_seen(seen):
     with open(DATA_FILE, "w") as f:
