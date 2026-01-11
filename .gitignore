@@ -1,0 +1,10 @@
+# Logs
+*.log
+
+# Runtime data
+*.json
+
+# Python cache
+__pycache__/
+*.pyc
+.env
