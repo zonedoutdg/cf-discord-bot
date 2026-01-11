@@ -25,6 +25,7 @@ USERS_FILE = "cf_users.json"
 CF_CONTESTS_FILE = "seen_cf.json"
 ATCODER_FILE = "seen_atcoder.json"
 CODECHEF_FILE = "seen_codechef.json"
+REMINDED_FILE = "reminded_contests.json"
 
 # ================== DISCORD SETUP ==================
 
@@ -70,6 +71,7 @@ cf_users = load_json(USERS_FILE, {})
 seen_cf = set(load_json(CF_CONTESTS_FILE, []))
 seen_atcoder = set(load_json(ATCODER_FILE, []))
 seen_codechef = set(load_json(CODECHEF_FILE, []))
+reminded_contests = set(load_json(REMINDED_FILE, []))
 
 # ================== HELPERS ==================
 
@@ -181,23 +183,41 @@ async def check_contests():
     # ---- Codeforces ----
     try:
         r = requests.get(CF_API_CONTESTS, timeout=10).json()
+        now = int(time.time())
         for c in r["result"]:
             if c["phase"] != "BEFORE":
                 continue
-            if c["id"] in seen_cf:
-                continue
+            
+            # 1. New Contest Notification
+            if c["id"] not in seen_cf:
+                seen_cf.add(c["id"])
+                save_json(CF_CONTESTS_FILE, list(seen_cf))
 
-            seen_cf.add(c["id"])
-            save_json(CF_CONTESTS_FILE, list(seen_cf))
+                embed = discord.Embed(
+                    title="📢 New Codeforces Contest!",
+                    description=c["name"],
+                    color=0x2B6BFF
+                )
+                embed.add_field(name="🕒 Start", value=f"<t:{c['startTimeSeconds']}:F>")
+                embed.add_field(name="🔗 Link", value="https://codeforces.com/contests")
+                await channel.send(embed=embed)
 
-            embed = discord.Embed(
-                title="📢 New Codeforces Contest!",
-                description=c["name"],
-                color=0x2B6BFF
-            )
-            embed.add_field(name="🕒 Start", value=f"<t:{c['startTimeSeconds']}:F>")
-            embed.add_field(name="🔗 Link", value="https://codeforces.com/contests")
-            await channel.send(embed=embed)
+            # 2. Reminder (30 mins before)
+            # Check if start time is within next 30 mins (1800s) and hasn't passed yet
+            time_until_start = c["startTimeSeconds"] - now
+            if 0 < time_until_start <= 1800 and c["id"] not in reminded_contests:
+                reminded_contests.add(c["id"])
+                save_json(REMINDED_FILE, list(reminded_contests))
+
+                embed = discord.Embed(
+                    title="🔔 Codeforces Contest Reminder",
+                    description=f"**{c['name']}** starts in less than 30 minutes!",
+                    color=0xFF0000
+                )
+                embed.add_field(name="🕒 Start", value=f"<t:{c['startTimeSeconds']}:R>") 
+                embed.add_field(name="🔗 Link", value="https://codeforces.com/contests")
+                await channel.send(embed=embed)
+
     except Exception:
         pass
 
@@ -206,59 +226,99 @@ async def check_contests():
         now = int(time.time())
         contests = requests.get(ATCODER_API, timeout=10).json()
         for c in contests:
-            if c["start_epoch_second"] < now:
-                continue
-            if c["id"] in seen_atcoder:
+            start_epoch = c["start_epoch_second"]
+            if start_epoch < now:
                 continue
 
-            seen_atcoder.add(c["id"])
-            save_json(ATCODER_FILE, list(seen_atcoder))
+            # 1. New Contest Notification
+            if c["id"] not in seen_atcoder:
+                seen_atcoder.add(c["id"])
+                save_json(ATCODER_FILE, list(seen_atcoder))
 
-            embed = discord.Embed(
-                title="📢 New AtCoder Contest!",
-                description=c["title"],
-                color=0x00AA88
-            )
-            embed.add_field(
-                name="🕒 Start",
-                value=f"<t:{c['start_epoch_second']}:F>"
-            )
-            embed.add_field(
-                name="🔗 Link",
-                value=f"https://atcoder.jp/contests/{c['id']}"
-            )
-            await channel.send(embed=embed)
+                embed = discord.Embed(
+                    title="📢 New AtCoder Contest!",
+                    description=c["title"],
+                    color=0x00AA88
+                )
+                embed.add_field(
+                    name="🕒 Start",
+                    value=f"<t:{start_epoch}:F>"
+                )
+                embed.add_field(
+                    name="🔗 Link",
+                    value=f"https://atcoder.jp/contests/{c['id']}"
+                )
+                await channel.send(embed=embed)
+
+            # 2. Reminder (30 mins before)
+            time_until_start = start_epoch - now
+            if 0 < time_until_start <= 1800 and c["id"] not in reminded_contests:
+                reminded_contests.add(c["id"])
+                save_json(REMINDED_FILE, list(reminded_contests))
+
+                embed = discord.Embed(
+                    title="🔔 AtCoder Contest Reminder",
+                    description=f"**{c['title']}** starts in less than 30 minutes!",
+                    color=0xFF0000
+                )
+                embed.add_field(name="🕒 Start", value=f"<t:{start_epoch}:R>")
+                embed.add_field(
+                    name="🔗 Link",
+                    value=f"https://atcoder.jp/contests/{c['id']}"
+                )
+                await channel.send(embed=embed)
     except Exception:
         pass
 
     # ---- CodeChef ----
     try:
+        now = int(time.time())
         data = requests.get(CODECHEF_API, timeout=10).json()
         for c in data.get("future_contests", []):
             cid = c["contest_code"]
-            if cid in seen_codechef:
-                continue
-
-            seen_codechef.add(cid)
-            save_json(CODECHEF_FILE, list(seen_codechef))
-
+            
+            # Parse timestamp for CodeChef
             ts = int(
                 datetime.fromisoformat(
                     c["contest_start_date_iso"].replace("Z", "+00:00")
                 ).timestamp()
             )
 
-            embed = discord.Embed(
-                title="📢 New CodeChef Contest!",
-                description=c["contest_name"],
-                color=0x964B00
-            )
-            embed.add_field(name="🕒 Start", value=f"<t:{ts}:F>")
-            embed.add_field(
-                name="🔗 Link",
-                value=f"https://www.codechef.com/{cid}"
-            )
-            await channel.send(embed=embed)
+            # 1. New Contest Notification
+            if cid not in seen_codechef:
+                seen_codechef.add(cid)
+                save_json(CODECHEF_FILE, list(seen_codechef))
+
+                embed = discord.Embed(
+                    title="📢 New CodeChef Contest!",
+                    description=c["contest_name"],
+                    color=0x964B00
+                )
+                embed.add_field(name="🕒 Start", value=f"<t:{ts}:F>")
+                embed.add_field(
+                    name="🔗 Link",
+                    value=f"https://www.codechef.com/{cid}"
+                )
+                await channel.send(embed=embed)
+
+            # 2. Reminder (30 mins before)
+            time_until_start = ts - now
+            if 0 < time_until_start <= 1800 and cid not in reminded_contests:
+                reminded_contests.add(cid)
+                save_json(REMINDED_FILE, list(reminded_contests))
+
+                embed = discord.Embed(
+                    title="🔔 CodeChef Contest Reminder",
+                    description=f"**{c['contest_name']}** starts in less than 30 minutes!",
+                    color=0xFF0000
+                )
+                embed.add_field(name="🕒 Start", value=f"<t:{ts}:R>")
+                embed.add_field(
+                    name="🔗 Link",
+                    value=f"https://www.codechef.com/{cid}"
+                )
+                await channel.send(embed=embed)
+
     except Exception:
         pass
 
