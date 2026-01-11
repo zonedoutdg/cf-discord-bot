@@ -57,4 +57,25 @@ python3 cf_bot.py
 
 ## Deployment
 
-The bot is designed to run locally or on a server. Ensure the process stays alive (e.g., using `screen`, `tmux`, or a system service like `systemd` or `launchd`).
+
+### Running in Background (Mac/Linux)
+
+**Option 1: Simple (Stops if you restart Mac)**
+```bash
+nohup ./run_bot.sh &
+```
+
+**Option 2: Permanent (Restarts automatically)**
+1.  Move the provided plist file to your LaunchAgents folder:
+    ```bash
+    cp com.cf.bot.plist ~/Library/LaunchAgents/
+    ```
+2.  Load the service:
+    ```bash
+    launchctl load ~/Library/LaunchAgents/com.cf.bot.plist
+    ```
+3.  To stop it:
+    ```bash
+    launchctl unload ~/Library/LaunchAgents/com.cf.bot.plist
+    ```
+
